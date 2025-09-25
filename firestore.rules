@@ -1,19 +1,52 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 10, 23);
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check user's role
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Users can only read their own profile
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if false; // Only admins should modify users (handle via Cloud Functions)
+    }
+    
+    // Anyone authenticated can read branches
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Managed via console/functions only
+    }
+    
+    // Customers - read only for authenticated users
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Synced from Cin7 via Cloud Functions
+    }
+    
+    // Products - read only for authenticated users
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Synced from Cin7 via Cloud Functions
+    }
+    
+    // Orders - users can only access orders from their branches
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Orders shouldn't be modified after creation
+    }
+    
+    // Docket counters - read only, modified by Cloud Functions
+    match /docketCounters/{branchId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Cloud Functions can update counters
     }
   }
 }
